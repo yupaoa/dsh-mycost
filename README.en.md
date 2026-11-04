@@ -113,17 +113,48 @@ Backfill rows are the **baseline**, therefore:
 
 ## Install
 
-```bash
-dsh plugin --profile desktop add dsh-mycost
+**This plugin is not published to npm.** Install it from GitHub.
+
+### Option 1: manual link (recommended, works on any DSH version)
+
+1. Clone it anywhere (track `main`, or pin a tag):
+
+```powershell
+git clone https://github.com/yupaoa/dsh-mycost.git $env:USERPROFILE\dsh-plugins\dsh-mycost
+# Behind the GFW? use the mirror:
+# git clone https://gh-proxy.com/https://github.com/yupaoa/dsh-mycost.git ...
 ```
 
-Local development: add `"dsh-mycost": "link:D:/path/to/dsh-mycost"` to the profile's
-`package.json`, add `dsh-mycost` to `dsh.profile.bundles`, then `pnpm install`.
-Host-side code loads only at boot — **restart DSH after every change**.
+2. Add the dependency to your profile's `package.json` and list the plugin as a bundle:
 
-The plugin has a host half and a client half, and neither needs a build step: the host
-reads `index.js`, the client reads `client.js` (declared through `dsh.client` in
-`package.json`).
+```json
+{
+  "dependencies": {
+    "dsh-mycost": "link:C:/Users/<you>/dsh-plugins/dsh-mycost"
+  },
+  "dsh": {
+    "profile": { "bundles": ["dsh-mycost"] }
+  }
+}
+```
+
+3. Run `pnpm install` inside the profile directory, then **restart DSH**.
+
+### Option 2: when your host accepts git specs
+
+```bash
+dsh plugin --profile desktop add github:yupaoa/dsh-mycost
+```
+
+If it reports that the package cannot be found, your build does not support git specs —
+use option 1.
+
+### After install
+
+Host-side code loads only at boot, so **restart DSH after every change**. The plugin has
+a host half and a client half and neither needs a build step: the host reads `index.js`,
+the client reads `client.js` (declared through `dsh.client` in `package.json`).
+Version history lives in [Releases](https://github.com/yupaoa/dsh-mycost/releases).
 
 ## Configuration
 

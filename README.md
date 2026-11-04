@@ -95,16 +95,45 @@ DeepSeek Harness 的 token 用量统计插件：把最近 30 天的用量按**�
 
 ## 安装
 
-```bash
-dsh plugin --profile desktop add dsh-mycost
+**本插件未发布到 npm**，请从 GitHub 安装。
+
+### 方式一：手动链接（推荐，任何 DSH 版本都可用）
+
+1. 克隆到任意位置（追 `main` 或锁定某个 tag）：
+
+```powershell
+git clone https://github.com/yupaoa/dsh-mycost.git $env:USERPROFILE\dsh-plugins\dsh-mycost
+# 国内网络可走镜像：git clone https://gh-proxy.com/https://github.com/yupaoa/dsh-mycost.git ...
 ```
 
-本地开发：在 profile 的 `package.json` 里加 `"dsh-mycost": "link:D:/path/to/dsh-mycost"`，
-把 `dsh-mycost` 加进 `dsh.profile.bundles`，再 `pnpm install`。
-宿主侧代码只在启动时加载，**改完必须重启 DSH**。
+2. 在 profile 的 `package.json` 里加依赖，并把插件挂进 bundle 列表：
 
-本插件由宿主插件 + 客户端两半组成，两半都不需要构建：宿主读 `index.js`，
-客户端读 `client.js`（由 `package.json` 的 `dsh.client` 声明）。
+```json
+{
+  "dependencies": {
+    "dsh-mycost": "link:C:/Users/<you>/dsh-plugins/dsh-mycost"
+  },
+  "dsh": {
+    "profile": { "bundles": ["dsh-mycost"] }
+  }
+}
+```
+
+3. 在 profile 目录下执行 `pnpm install`，然后**重启 DSH**。
+
+### 方式二：宿主支持 git 规格时
+
+```bash
+dsh plugin --profile desktop add github:yupaoa/dsh-mycost
+```
+
+若提示找不到包，说明你用的版本不支持 git 规格，请改用方式一。
+
+### 安装后
+
+宿主侧代码只在启动时加载，**改完必须重启 DSH**。插件由宿主半 + 客户端半组成，
+两半都不需要构建：宿主读 `index.js`，客户端读 `client.js`（由 `package.json` 的
+`dsh.client` 声明）。版本历史见 [Releases](https://github.com/yupaoa/dsh-mycost/releases)。
 
 ## 配置
 
