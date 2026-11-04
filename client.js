@@ -279,6 +279,28 @@ window.__ModuleLoader__.load({
     /** How often an open page re-checks the window while it sits idle. */
     const AUTO_REFRESH_MS = 60 * 1000
 
+    /** Where the last chosen window is remembered, so the page reopens on it. */
+    const WINDOW_KEY = 'dsh-mycost:window'
+
+    /** Storage can throw (private mode, sandboxed iframe); never let that break the page. */
+    const readStoredWindow = () => {
+      try {
+        const raw = globalThis.localStorage?.getItem(WINDOW_KEY)
+        const value = Number.parseInt(raw ?? '', 10)
+        return WINDOWS.includes(value) ? value : null
+      } catch {
+        return null
+      }
+    }
+
+    const storeWindow = (value) => {
+      try {
+        globalThis.localStorage?.setItem(WINDOW_KEY, String(value))
+      } catch {
+        /* remembering is a nicety, not a requirement */
+      }
+    }
+
     /** `1` reads as the "today" chip, every other window as "N 天". */
     const windowLabel = (value, t) => (value === 1 ? t('today') : `${value} ${t('daysUnit')}`)
 
@@ -351,7 +373,8 @@ window.__ModuleLoader__.load({
       const rpc = props.rpc
       const t = props.t
       const [state, setState] = React.useState({ loading: true, data: null, error: null })
-      const [days, setDays] = React.useState(30)
+      // Reopen on whatever window was last used; 30 days stays the first-run default.
+      const [days, setDays] = React.useState(() => readStoredWindow() ?? 30)
       const [busy, setBusy] = React.useState(false)
 
       const load = React.useCallback(
@@ -425,7 +448,14 @@ window.__ModuleLoader__.load({
           ...WINDOWS.map((value) =>
             h(
               'button',
-              { key: String(value), style: css.chip(days === value), onClick: () => setDays(value) },
+              {
+                key: String(value),
+                style: css.chip(days === value),
+                onClick: () => {
+                  storeWindow(value)
+                  setDays(value)
+                },
+              },
               windowLabel(value, t),
             ),
           ),

@@ -425,3 +425,55 @@ test('a throwing translator falls back to the bundled dictionary', async () => {
   const section = harness.slots.find((item) => item.spec.name === 'settings.section')
   assert.ok(section.spec.label().length > 0)
 })
+
+test('the page reopens on whichever window was used last time', async () => {
+  const { module, React } = await loadClient()
+  const key = 'dsh-mycost:window'
+  const store = new Map([[key, '1']])
+  globalThis.localStorage = {
+    getItem: (name) => store.get(name) ?? null,
+    setItem: (name, value) => store.set(name, String(value)),
+    removeItem: (name) => store.delete(name),
+  }
+  try {
+    const harness = fakeCtx()
+    module.apply(harness.ctx)
+    const Section = harness.slots.find((item) => item.spec.name === 'settings.section').component
+
+    const days = []
+    const rpc = { call: async (channel, endpoint, payload) => (days.push(payload?.days), { ok: true, value: report }) }
+    const props = { rpc, t: (name) => name }
+    await React.__settle(Section, props)
+    assert.equal(days.at(-1), 1, 'a remembered "today" must be requested on open')
+
+    const chip = React.__find(
+      Section,
+      props,
+      (element) => element.props?.onClick !== undefined && [element.props?.children].flat(2).join('') === '30 daysUnit',
+    )
+    assert.ok(chip, 'the 30-day chip should exist')
+    await chip.props.onClick()
+    await React.__pass(Section, props)
+    await new Promise((resolve) => setTimeout(resolve, 10))
+    assert.equal(store.get(key), '30', 'picking a window must be remembered for next time')
+  } finally {
+    delete globalThis.localStorage
+  }
+})
+
+test('a corrupt remembered window falls back to thirty days', async () => {
+  const { module, React } = await loadClient()
+  const store = new Map([['dsh-mycost:window', 'banana']])
+  globalThis.localStorage = { getItem: (name) => store.get(name) ?? null, setItem: () => {}, removeItem: () => {} }
+  try {
+    const harness = fakeCtx()
+    module.apply(harness.ctx)
+    const Section = harness.slots.find((item) => item.spec.name === 'settings.section').component
+    const days = []
+    const rpc = { call: async (channel, endpoint, payload) => (days.push(payload?.days), { ok: true, value: report }) }
+    await React.__settle(Section, { rpc, t: (name) => name })
+    assert.equal(days.at(-1), 30)
+  } finally {
+    delete globalThis.localStorage
+  }
+})

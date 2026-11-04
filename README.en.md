@@ -38,6 +38,7 @@ Numbers only, no money.
   and refresh immediately.
 - 🖥️ **Its own Settings section**: Settings → **Token 用量**, with its own bar-chart
   glyph in the left nav.
+  The window you looked at last is remembered and reopened next time.
 - 🛠️ **`usage_report` tool**: lets the model answer "how many tokens did I use",
   optionally filtered by days and model.
 - 🔒 **Read-only towards model state**: declares no tools, skills or model selection;
