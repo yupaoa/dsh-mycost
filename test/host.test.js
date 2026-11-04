@@ -452,3 +452,45 @@ test('a session resumed after its history expired counts only the new tokens', a
   assert.equal(report.totals.cacheRead, 500)
   assert.equal(report.totals.output, 140)
 })
+
+test('a forked session inherits its baseline instead of re-counting the parent', async () => {
+  const sessions = [listed('parent')]
+  const harness = await boot({ sessions })
+  await harness.rpc('backfill', {})
+  const first = await harness.rpc('report', { days: 30 })
+  assert.equal(first.totals.cacheRead, 9000, 'the parent is imported once')
+
+  // Same totals as the parent, but this is a seeded copy of it: nothing new was
+  // spent, so the report must not move.
+  sessions.push(
+    listed('child', {
+      isSeeded: true,
+      parentSession: 'parent',
+      updatedAt: Date.now(),
+    }),
+  )
+  await harness.rpc('backfill', {})
+  const afterFork = await harness.rpc('report', { days: 30 })
+  assert.equal(afterFork.totals.cacheRead, 9000, 'the inherited history must not be counted twice')
+  assert.equal(afterFork.totals.output, 500)
+  assert.equal(afterFork.count, 1, 'a seeded baseline is not a call')
+
+  // Real work in the fork is still counted, and only that work.
+  sessions[1] = listed('child', {
+    isSeeded: true,
+    parentSession: 'parent',
+    updatedAt: Date.now(),
+    projections: {
+      tokenUsage: {
+        totals: { uncachedInputTokens: 1200, cacheReadTokens: 11500, cacheWriteTokens: 0, outputTokens: 640 },
+        last: { turn: 6, step: 3, buckets: {} },
+      },
+      modelSelection: { lastUsed: { provider: 'chatecnu', model: 'ecnu-max' }, pending: null },
+    },
+  })
+  await harness.rpc('backfill', {})
+  const grown = await harness.rpc('report', { days: 30 })
+  assert.equal(grown.totals.cacheRead, 9000 + 2500, 'only the post-fork delta counts')
+  assert.equal(grown.totals.output, 500 + 140)
+  assert.equal(grown.count, 2, 'one parent call plus one delta from the fork')
+})

@@ -261,6 +261,7 @@ function mount(ctx, config, mark = () => {}) {
     const seen = new Set()
     let written = 0
     let skipped = 0
+    let seededCount = 0
     for (const candidate of candidates) {
       const session = candidate.session
       const sessionId = session?.id ?? session?.sessionId
@@ -297,6 +298,15 @@ function mount(ctx, config, mark = () => {}) {
         skipped += 1
         continue
       }
+      const seeded = seededBaseline(session, sessionId, usage, stored)
+      if (seeded !== null) {
+        seen.add(sessionId)
+        if ((await writeSeeded(sessionId, route, seeded, ts)) !== null) {
+          stored.set(sessionId, { ...seeded, rows: 1 })
+          seededCount += 1
+        }
+        continue
+      }
       const row = makeRow({
         ts,
         sessionId,
@@ -327,7 +337,8 @@ function mount(ctx, config, mark = () => {}) {
       written += 1
     }
     if (written > 0) warn(`my-cost: backfilled ${written} session(s) from cached projections`)
-    return { imported: written, skipped }
+    if (seededCount > 0) warn(`my-cost: seeded ${seededCount} forked session(s) from their parent`)
+    return { imported: written, skipped, seeded: seededCount }
   }
 
   // ------------------------------------------------------- real-time top-up
@@ -349,6 +360,57 @@ function mount(ctx, config, mark = () => {}) {
     return map
   }
 
+  /** True when a session was seeded from another one, so its totals start non-zero. */
+  function seedParentOf(session, sessionId) {
+    const seeded = session?.isSeeded ?? session?.header?.isSeeded
+    if (seeded !== true) return null
+    const parentSession = session?.parentSession ?? session?.header?.parentSession
+    if (!parentSession || parentSession === sessionId) return null
+    return parentSession
+  }
+
+  /**
+   * A seeded (forked) session inherits the parent's cumulative projection, so
+   * importing it as new would count the parent's whole history a second time.
+   * The inherited portion becomes a `seeded` row: a baseline that is measured
+   * against but never aggregated. Capped by what the child actually holds, so a
+   * child can never come out with a negative delta.
+   */
+  function seededBaseline(session, sessionId, usage, stored) {
+    const parentSession = seedParentOf(session, sessionId)
+    if (parentSession === null) return null
+    const parent = stored.get(parentSession)
+    if (parent === undefined) return null
+    const cap = (child, inherited) => Math.max(0, Math.min(Number(child) || 0, Number(inherited) || 0))
+    return {
+      uncachedInput: cap(usage?.uncachedInputTokens, parent.uncachedInput),
+      cacheRead: cap(usage?.cacheReadTokens, parent.cacheRead),
+      cacheWrite: cap(usage?.cacheWriteTokens, parent.cacheWrite),
+      output: cap(usage?.outputTokens, parent.output),
+    }
+  }
+
+  /** Persist a seeded baseline row; returns it, or null when the numbers are unusable. */
+  async function writeSeeded(sessionId, route, seeded, ts) {
+    const row = makeRow({
+      ts,
+      sessionId,
+      provider: route.provider,
+      model: route.model,
+      usage: {
+        inputTokens: seeded.uncachedInput,
+        outputTokens: seeded.output,
+        cacheReadTokens: seeded.cacheRead,
+        cacheWriteTokens: seeded.cacheWrite,
+      },
+      src: 'seeded',
+      timeZone,
+    })
+    if (row === null) return null
+    await store.upsert(row)
+    return row
+  }
+
   let syncCounter = 0
 
   /**
@@ -367,6 +429,7 @@ function mount(ctx, config, mark = () => {}) {
       if (today < cutoff()) return { reason, written: 0, skipped: 'out-of-retention' }
       const stored = storedBySession(await store.load())
       let written = 0
+      let seededRows = 0
       // list() may be sync or async depending on the host build; awaiting a
       // plain array is harmless, while iterating an un-awaited promise silently
       // yields zero sessions (which is how the first version wrote nothing).
@@ -380,7 +443,16 @@ function mount(ctx, config, mark = () => {}) {
         const selection = projections.stateOf(session, 'modelSelection')
         const route = selection?.lastUsed ?? selection
         if (!route?.provider || !route?.model) continue
-        const before = stored.get(sessionId)
+        let before = stored.get(sessionId)
+        if (before === undefined) {
+          const seeded = seededBaseline(session, sessionId, usage, stored)
+          if (seeded !== null && (await writeSeeded(sessionId, route, seeded, now)) !== null) {
+            stored.set(sessionId, { ...seeded, rows: 1 })
+            seededRows += 1
+            continue
+          }
+        }
+        before = stored.get(sessionId)
         // Row fields are the store's own vocabulary (wire.js BUCKETS); the
         // projection uses provider names. Translate once, here.
         const delta = {
@@ -412,7 +484,8 @@ function mount(ctx, config, mark = () => {}) {
         written += 1
       }
       if (written > 0) warn(`my-cost: ${reason} sync wrote ${written} live row(s)`)
-      return { reason, written }
+      if (seededRows > 0) warn(`my-cost: ${reason} sync seeded ${seededRows} forked session(s)`)
+      return { reason, written, seeded: seededRows }
     } catch (error) {
       warn(`my-cost: ${reason} sync failed: ${error?.message ?? error}`)
       return { reason, written: 0, error: String(error?.message ?? error) }
@@ -547,7 +620,10 @@ function mount(ctx, config, mark = () => {}) {
   async function report(days = retentionDays) {
     const window = Math.max(1, Math.min(365, Number(days) || retentionDays))
     const rows = await store.load()
-    const kept = rows.filter((row) => row.day >= cutoffDay(Date.now(), window, timeZone))
+    // `seeded` rows carry a forked session's inherited baseline. They exist so the
+    // next delta is measured from the right place, and must never be counted.
+    const counted = rows.filter((row) => row.src !== 'seeded')
+    const kept = counted.filter((row) => row.day >= cutoffDay(Date.now(), window, timeZone))
     const snapshot = rollup(kept)
     return {
       days: window,

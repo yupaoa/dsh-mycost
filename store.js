@@ -84,10 +84,12 @@ export function createStore({ file, onWarn = () => {} }) {
     prune(cutoff) {
       return serial(async () => {
         if (!loaded) await readAll()
-        // Backfill rows are the ledger baseline: one per session, and the next
-        // delta is measured from them. Dropping one would make the following
-        // sync re-count a whole session as if it happened today.
-        const kept = [...rows.values()].filter((row) => row.day >= cutoff || row.src === 'backfill')
+        // Baseline rows (`backfill` and the `seeded` row of a forked session) are
+        // the ledger: the next delta is measured from them. Dropping one would make
+        // the following sync re-count a whole session as if it happened today.
+        const kept = [...rows.values()].filter(
+          (row) => row.day >= cutoff || row.src === 'backfill' || row.src === 'seeded',
+        )
         const removed = rows.size - kept.length
         if (removed === 0) return 0
         const body = kept.map((row) => `${JSON.stringify(row)}\n`).join('')

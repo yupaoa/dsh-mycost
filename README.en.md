@@ -110,6 +110,22 @@ Backfill rows are the **baseline**, therefore:
 2. Old sessions that sit outside every window still get a baseline row. Their `day` is
    in the past, so they never appear in "today / 7 days / 30 days".
 
+### Baseline of a forked session
+
+A session forked from another one (DSH marks it `isSeeded: true` with a `parentSession`)
+**inherits the parent's cumulative usage**, so it does not start at zero: a
+`src: 'seeded'` baseline row is written first (the parent's already-stored amount, capped
+by what the child holds), and only what comes after belongs to the fork. `seeded` rows
+are **never aggregated** — they are a baseline — and, like backfill rows, they are never pruned.
+
+Early versions missed this and counted a fork's whole inherited history again. To repair a
+store written back then:
+
+```bash
+node scripts/purge-seeded.mjs --dry-run   # see what would go
+node scripts/purge-seeded.mjs             # apply (takes a backup first)
+```
+
 `live` rows expire normally according to `retentionDays`.
 
 ## Install

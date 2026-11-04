@@ -92,6 +92,19 @@ DeepSeek Harness 的 token 用量统计插件：把最近 30 天的用量按**�
    下一轮增量会把整个会话算成今天；
 2. 超出窗口的老会话同样会导入一条基线行，它的 `day` 在过去，所以不出现在任何窗口里。
 
+### 分叉会话的基线
+
+从已有会话分叉出来的会话（DSH 标记为 `isSeeded: true` 并带 `parentSession`）**继承父会话的累计用量**。
+所以它不会从 0 起算，而是先写一条 `src: 'seeded'` 的基线行（值 = 父会话已有量，且不超过子会话当前量），
+之后的增量才属于它自己。`seeded` 行**不参与统计**，只当基线，并且和回填行一样不会被 prune 删除。
+
+早期版本没处理这种情况，分叉会把父会话的历史整份再记一遍。修复这类历史数据用：
+
+```bash
+node scripts/purge-seeded.mjs --dry-run   # 先看会删什么
+node scripts/purge-seeded.mjs             # 实际执行（自动备份）
+```
+
 `live` 行按 `retentionDays` 正常过期。
 
 ## 安装

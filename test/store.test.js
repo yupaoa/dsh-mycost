@@ -106,3 +106,16 @@ test('prune writes nothing when there is nothing to drop', async () => {
   await store.prune('2026-10-05')
   assert.equal(await readFile(file, 'utf8'), before)
 })
+
+test('prune keeps a seeded baseline, which is an inherited fork ledger', async () => {
+  const file = await tmpFile()
+  const store = createStore({ file })
+  await store.load()
+  await store.upsert(row('seed', { day: '2026-08-01', src: 'seeded' }))
+  await store.upsert(row('old-live', { day: '2026-08-01', src: 'live' }))
+
+  await store.prune('2026-10-05')
+
+  const ids = (await createStore({ file }).load()).map((r) => r.id)
+  assert.deepEqual(ids, ['seed'], 'the inherited baseline must outlive its day')
+})
