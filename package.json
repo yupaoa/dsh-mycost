@@ -1,0 +1,74 @@
+{
+  "name": "dsh-mycost",
+  "version": "0.1.0",
+  "description": "Token 用量统计：按模型与提供商拆分最近 30 天的缓存命中 / 未命中 / 输出 token，含缓存命中率与用量结构，支持今天 / 7 天 / 30 天与实时增量。",
+  "keywords": [
+    "deepseek",
+    "deepseek-harness",
+    "dsh",
+    "dsh-plugin",
+    "cordis",
+    "token-usage",
+    "cost"
+  ],
+  "type": "module",
+  "main": "index.js",
+  "exports": {
+    ".": "./index.js",
+    "./client": "./client.js",
+    "./wire": "./wire.js",
+    "./store": "./store.js",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "index.js",
+    "client.js",
+    "wire.js",
+    "store.js",
+    "cordis.patch.yml",
+    "README.md",
+    "README.en.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "test": "node --test test/*.test.js"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web",
+      "inject": [
+        "@deepseek-ai/dsh-client-ui-renderer",
+        "@deepseek-ai/dsh-client-ui-primitives",
+        "@deepseek-ai/dsh-client-locale"
+      ]
+    }
+  },
+  "engines": {
+    "node": "^22.19.0 || >=24.0.0",
+    "dsh": ">=0.2.1-rc.2"
+  },
+  "license": "MIT",
+  "peerDependencies": {
+    "@deepseek-ai/cordis": "^4.0.0",
+    "@deepseek-ai/schemastery": "^3.18.1"
+  },
+  "devDependencies": {
+    "@deepseek-ai/cordis": "^4.0.5",
+    "@deepseek-ai/schemastery": "^3.18.5"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/yupaoa/dsh-mycost.git"
+  },
+  "homepage": "https://github.com/yupaoa/dsh-mycost#readme",
+  "bugs": {
+    "url": "https://github.com/yupaoa/dsh-mycost/issues"
+  },
+  "author": {
+    "name": "yupaoa",
+    "url": "https://github.com/yupaoa"
+  }
+}

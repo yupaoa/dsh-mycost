@@ -1,0 +1,17 @@
+# Dependencies
+node_modules/
+
+# Local planning notes — not part of the published plugin
+PLAN.md
+*.local.md
+
+# Runtime output and logs
+*.log
+tmp/
+coverage/
+
+# OS / editor noise
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/

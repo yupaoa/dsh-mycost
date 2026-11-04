@@ -1,0 +1,6 @@
+# dsh-mycost — bundle patch.
+#
+# One host half, one client half. Nothing else in the composition is touched.
+- insert:
+    - id: my-cost
+      name: 'dsh-mycost'
