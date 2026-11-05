@@ -338,52 +338,24 @@ test('the window switch asks the host for seven days', async () => {
   await React.__pass(Section, props)
   await new Promise((resolve) => setTimeout(resolve, 10))
 })
-test('the settings nav button gets our own glyph instead of the shell gear', async () => {
+test('the settings row glyph is claimed through the settings.section.icon slot', async () => {
   const { module } = await loadClient()
-  const span = {
-    className: '',
-    attributes: {},
-    setAttribute(name, value) {
-      this.attributes[name] = value
-    },
-    set innerHTML(value) {
-      this.html = value
-    },
-    get innerHTML() {
-      return this.html
-    },
-  }
-  const gear = { className: 'shell-icon', getAttribute: () => null }
-  const button = {
-    textContent: 'Token 用量',
-    childElementCount: 2,
-    firstElementChild: gear,
-    lastElementChild: {},
-    replaced: null,
-    replaceChild(next, previous) {
-      this.replaced = { next, previous }
-    },
-  }
-  let disconnected = false
-  globalThis.document = { body: { querySelectorAll: () => [button] }, createElement: () => span }
-  globalThis.MutationObserver = class {
-    observe() {}
-    disconnect() {
-      disconnected = true
-    }
-  }
-  try {
-    module.apply(fakeCtx().ctx)
-    assert.ok(span.html?.includes('<svg'), 'the gear must be swapped for our inline svg')
-    assert.equal(button.replaced?.next, span)
-    assert.equal(button.replaced?.previous, gear)
-    assert.equal(span.className, 'shell-icon', 'the shell class must be kept so sizing still applies')
-    assert.equal(span.attributes['data-my-cost-nav-icon'], '1', 'the marker keeps re-renders idempotent')
-  } finally {
-    delete globalThis.document
-    delete globalThis.MutationObserver
-  }
+  const harness = fakeCtx()
+  module.apply(harness.ctx)
+
+  const entry = harness.slots.find((item) => item.spec.name === 'settings.section.icon')
+  assert.ok(entry, 'the shell renders row icons from this slot; without it a third-party id gets the gear')
+  assert.equal(entry.spec.id, 'my-cost', 'the shell filters icons by section id (only: row.id)')
+
+  const idle = entry.component({ size: 16, active: false })
+  assert.equal(idle.type, 'svg')
+  assert.equal(idle.props.width, 16)
+  assert.equal(idle.props.children.length, 4, 'a baseline plus three ascending bars')
+
+  const active = entry.component({ size: 16, active: true })
+  assert.ok(active.props.strokeWidth > idle.props.strokeWidth, 'the active row should read as selected')
 })
+
 // The renderer hands `apply` a plain service bag in some builds; calling
 // `ctx.get` there threw `ctx.get is not a function` and aborted the web boot.
 test('apply survives a client context without ctx.get', async () => {

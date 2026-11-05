@@ -188,10 +188,10 @@ Version history lives in [Releases](https://github.com/yupaoa/dsh-mycost/release
 - **`onChanged` may be absent**: some builds do not expose the hook, in which case
   real-time granularity degrades to the 20-second poll (the boot log says which path is
   in use).
-- **The nav icon is a DOM swap**: the settings shell picks an icon per section id and
-  third-party ids only get the default gear. This plugin replaces it with its own glyph
-  after the nav renders, guarded by a `MutationObserver`. If the shell changes its
-  markup, the worst case is **falling back to the gear** — functionality is unaffected.
+- **The nav icon comes from a slot**: the shell renders each row's glyph through
+  `renderSlot('settings.section.icon', { size, active }, { only: row.id })`, so this plugin
+  registers an entry with `id: 'my-cost'` and never touches the DOM. On a build without
+  that slot the worst case is **the default gear** — functionality is unaffected.
 - **Cold sessions need a projection cache**: a session this process never opened and
   that `sessionProjectionCache` has no record of is skipped rather than counted as zero.
 - **The page refreshes every 60 seconds**: a day rollover shows up at most a minute

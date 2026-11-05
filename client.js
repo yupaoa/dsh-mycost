@@ -79,106 +79,32 @@ window.__ModuleLoader__.load({
     // ------------------------------------------------------------- nav icon
 
     /**
-     * The settings nav gives built-in sections their own glyph and falls back to
-     * a gear for a third-party id: the slot contract has no icon field (verified
-     * against the `general` / `agent-presets` registrations in the app bundle).
-     * dsh-persona-switcher solves it the only available way — find its own nav
-     * button once it renders and swap the icon element for an inline SVG, keep
-     * the original class so the shell's sizing/spacing still applies, and watch
-     * the tree so a re-render does not restore the gear.
+     * The shell renders each settings row's glyph through the `settings.section.icon`
+     * list slot — `renderSlot("settings.section.icon", { size: 16, active }, { only: row.id })`
+     * — so registering an entry with our section id is the supported route and no
+     * DOM patching is needed. Size and active state arrive as props.
      */
-    const NAV_ICON_TAG = 'data-my-cost-nav-icon'
-
-    // Three ascending bars over a baseline: usage that grows. Stroke-only, same
-    // weight and cap as the shell's own 16px icons.
-    const NAV_ICON_PARTS = [
-      ['path', { d: 'M2.8 12.9h10.4' }],
-      ['path', { d: 'M5 12.9V8.4' }],
-      ['path', { d: 'M8 12.9V4.5' }],
-      ['path', { d: 'M11 12.9V6.7' }],
-    ]
-
-    function navIconSvg(size) {
-      const attrs = [
-        'viewBox="0 0 16 16"',
-        `width="${size}"`,
-        `height="${size}"`,
-        'fill="none"',
-        'stroke="currentColor"',
-        'stroke-width="1.4"',
-        'stroke-linecap="round"',
-        'stroke-linejoin="round"',
-        'aria-hidden="true"',
-        'focusable="false"',
-      ].join(' ')
-      const inner = NAV_ICON_PARTS.map(
-        ([tag, props]) =>
-          `<${tag} ${Object.entries(props)
-            .map(([key, value]) => `${key}="${value}"`)
-            .join(' ')}/>`,
-      ).join('')
-      return `<svg ${attrs}>${inner}</svg>`
-    }
-
-    /**
-     * Patch the settings-nav button whose label is ours. Returns a disposer, or
-     * `null` when there is no DOM (the offline test stub) — never throws.
-     */
-    function installNavIcon(labelOf) {
-      if (typeof document === 'undefined' || document.body === null) return null
-      if (typeof MutationObserver !== 'function') return null
-      const patched = new WeakSet()
-      const patchIn = (root) => {
-        if (!root || typeof root.querySelectorAll !== 'function') return
-        let wanted
-        try {
-          wanted = labelOf()
-        } catch {
-          return
-        }
-        if (!wanted) return
-        let buttons = []
-        try {
-          buttons = root.querySelectorAll('nav button')
-        } catch {
-          return
-        }
-        for (const button of buttons) {
-          try {
-            if (patched.has(button)) continue
-            if ((button.textContent || '').trim() !== wanted) continue
-            const icon = button.firstElementChild
-            // A lone element child is ambiguous (it may be the label itself).
-            if (!icon || (icon === button.lastElementChild && button.childElementCount < 2)) continue
-            if (icon.getAttribute(NAV_ICON_TAG) === '1') {
-              patched.add(button)
-              continue
-            }
-            const rawClass = icon.className
-            const span = document.createElement('span')
-            span.className = typeof rawClass === 'string' ? rawClass : icon.getAttribute('class') || ''
-            span.setAttribute(NAV_ICON_TAG, '1')
-            span.innerHTML = navIconSvg(16)
-            button.replaceChild(span, icon)
-            patched.add(button)
-          } catch {}
-        }
-      }
-      patchIn(document.body)
-      const observer = new MutationObserver((records) => {
-        for (const record of records) {
-          for (const node of record.addedNodes) {
-            if (node && node.nodeType === 1) patchIn(node)
-          }
-        }
-      })
-      observer.observe(document.body, { childList: true, subtree: true })
-      return () => {
-        try {
-          observer.disconnect()
-        } catch {}
-      }
-    }
+    const SettingsIcon = ({ size = 16, active = false } = {}) =>
+      h(
+        'svg',
+        {
+          viewBox: '0 0 16 16',
+          width: size,
+          height: size,
+          fill: 'none',
+          stroke: 'currentColor',
+          strokeWidth: active ? 1.7 : 1.4,
+          strokeLinecap: 'round',
+          strokeLinejoin: 'round',
+          'aria-hidden': 'true',
+          focusable: 'false',
+        },
+        // Three ascending bars over a baseline: usage that grows.
+        h('path', { key: 'base', d: 'M2.8 12.9h10.4' }),
+        h('path', { key: 'a', d: 'M5 12.9V8.4' }),
+        h('path', { key: 'b', d: 'M8 12.9V4.5' }),
+        h('path', { key: 'c', d: 'M11 12.9V6.7' }),
+      )
 
     // ---------------------------------------------------------------- styling
 
@@ -801,11 +727,12 @@ window.__ModuleLoader__.load({
           ),
       )
 
-      // Replace the gear the shell hands a third-party section with our own
-      // usage glyph. Same DOM route as persona-switcher; it re-applies itself
-      // whenever the nav is re-rendered.
-      softly('nav icon', () =>
-        ctx.effect(() => installNavIcon(() => t('title')) ?? undefined, 'my-cost: nav icon'),
+      // The glyph for our row. The shell looks it up by section id, so this is the
+      // whole contract — no nav DOM is touched.
+      softly('settings icon', () =>
+        ctx.slots.inject('settings.section.icon', () =>
+          ctx.slots.register({ name: 'settings.section.icon', id: TAB_ID }, boundary('Token 用量图标', SettingsIcon)),
+        ),
       )
 
       try {
