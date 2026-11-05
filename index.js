@@ -294,16 +294,47 @@ function mount(ctx, config, mark = () => {}) {
       // is the delta baseline, invisible to every window because of its own
       // day. Skipping it would leave the baseline empty and the next sync would
       // count a whole old session as if it happened today.
-      if (!sessionId || seen.has(sessionId) || stored.has(sessionId) || !usage || !route) {
+      // A fork is imported even when it already has rows: its ledger may be short of
+      // the baseline it inherited, and topping that up is idempotent.
+      const isFork = sessionId ? seedParentOf(session, sessionId) !== null : false
+      if (!sessionId || seen.has(sessionId) || !usage || !route || (stored.has(sessionId) && !isFork)) {
         skipped += 1
         continue
       }
-      const seeded = seededBaseline(session, sessionId, usage, stored)
-      if (seeded !== null) {
+      if (isFork) {
         seen.add(sessionId)
-        if ((await writeSeeded(sessionId, route, seeded, ts)) !== null) {
-          stored.set(sessionId, { ...seeded, rows: 1 })
-          seededCount += 1
+        seededCount += await topUpSeeded(session, sessionId, usage, route, stored, ts)
+        // What the fork spent on its own is the growth above the baseline.
+        const baseline = stored.get(sessionId) ?? {}
+        const own = {
+          uncachedInput: Math.max(0, (usage.uncachedInputTokens ?? 0) - (baseline.uncachedInput ?? 0)),
+          cacheRead: Math.max(0, (usage.cacheReadTokens ?? 0) - (baseline.cacheRead ?? 0)),
+          cacheWrite: Math.max(0, (usage.cacheWriteTokens ?? 0) - (baseline.cacheWrite ?? 0)),
+          output: Math.max(0, (usage.outputTokens ?? 0) - (baseline.output ?? 0)),
+        }
+        if (BUCKETS.some((key) => own[key] > 0)) {
+          const row = makeRow({
+            ts,
+            sessionId,
+            provider: route.provider,
+            model: route.model,
+            usage: {
+              inputTokens: own.uncachedInput,
+              outputTokens: own.output,
+              cacheReadTokens: own.cacheRead,
+              cacheWriteTokens: own.cacheWrite,
+            },
+            src: 'backfill',
+            timeZone,
+          })
+          if (row !== null) {
+            await store.upsert(row)
+            const entry = stored.get(sessionId) ?? { uncachedInput: 0, cacheRead: 0, cacheWrite: 0, output: 0, rows: 0 }
+            for (const key of BUCKETS) entry[key] += own[key]
+            entry.rows = (entry.rows ?? 0) + 1
+            stored.set(sessionId, entry)
+            written += 1
+          }
         }
         continue
       }
@@ -411,6 +442,36 @@ function mount(ctx, config, mark = () => {}) {
     return row
   }
 
+  /**
+   * Make sure a forked session's ledger covers the usage it inherited.
+   *
+   * The invariant is "the rows always hold at least the inherited amount", not
+   * "the first import was right": a fork can be re-imported, its rows can be
+   * repaired, or it can be seen for the first time after it already did some
+   * work. Comparing the stored total against the parent's baseline and writing
+   * only the shortfall makes every one of those cases converge, and running it
+   * twice is a no-op.
+   */
+  async function topUpSeeded(session, sessionId, usage, route, stored, ts) {
+    if (seedParentOf(session, sessionId) === null) return 0
+    const inherited = seededBaseline(session, sessionId, usage, stored)
+    if (inherited === null) return 0
+    const before = stored.get(sessionId)
+    const gap = {}
+    let short = false
+    for (const key of BUCKETS) {
+      gap[key] = Math.max(0, (inherited[key] ?? 0) - (before?.[key] ?? 0))
+      if (gap[key] > 0) short = true
+    }
+    if (!short) return 0
+    if ((await writeSeeded(sessionId, route, gap, ts)) === null) return 0
+    const entry = before ?? { uncachedInput: 0, cacheRead: 0, cacheWrite: 0, output: 0, rows: 0 }
+    for (const key of BUCKETS) entry[key] += gap[key]
+    entry.rows = (entry.rows ?? 0) + 1
+    stored.set(sessionId, entry)
+    return 1
+  }
+
   let syncCounter = 0
 
   /**
@@ -443,16 +504,8 @@ function mount(ctx, config, mark = () => {}) {
         const selection = projections.stateOf(session, 'modelSelection')
         const route = selection?.lastUsed ?? selection
         if (!route?.provider || !route?.model) continue
-        let before = stored.get(sessionId)
-        if (before === undefined) {
-          const seeded = seededBaseline(session, sessionId, usage, stored)
-          if (seeded !== null && (await writeSeeded(sessionId, route, seeded, now)) !== null) {
-            stored.set(sessionId, { ...seeded, rows: 1 })
-            seededRows += 1
-            continue
-          }
-        }
-        before = stored.get(sessionId)
+        seededRows += await topUpSeeded(session, sessionId, usage, route, stored, now)
+        const before = stored.get(sessionId)
         // Row fields are the store's own vocabulary (wire.js BUCKETS); the
         // projection uses provider names. Translate once, here.
         const delta = {

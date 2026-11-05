@@ -494,3 +494,45 @@ test('a forked session inherits its baseline instead of re-counting the parent',
   assert.equal(grown.totals.output, 500 + 140)
   assert.equal(grown.count, 2, 'one parent call plus one delta from the fork')
 })
+
+test('re-importing a fork is idempotent: the baseline is topped up once', async () => {
+  const sessions = [listed('parent')]
+  const harness = await boot({ sessions })
+  await harness.rpc('backfill', {})
+  sessions.push(listed('child', { isSeeded: true, parentSession: 'parent', updatedAt: Date.now() }))
+
+  await harness.rpc('backfill', {})
+  const once = await harness.rpc('report', { days: 30 })
+  await harness.rpc('backfill', {})
+  const twice = await harness.rpc('report', { days: 30 })
+
+  assert.equal(twice.totals.cacheRead, once.totals.cacheRead)
+  assert.equal(twice.count, once.count)
+  assert.equal(twice.stored, once.stored, 'a second pass must not write another baseline row')
+})
+
+test('a fork smaller than its parent contributes nothing', async () => {
+  const sessions = [listed('parent')]
+  const harness = await boot({ sessions })
+  await harness.rpc('backfill', {})
+  sessions.push(
+    listed('child', {
+      isSeeded: true,
+      parentSession: 'parent',
+      updatedAt: Date.now(),
+      projections: {
+        tokenUsage: {
+          totals: { uncachedInputTokens: 900, cacheReadTokens: 8000, cacheWriteTokens: 0, outputTokens: 400 },
+          last: { turn: 5, step: 2, buckets: {} },
+        },
+        modelSelection: { lastUsed: { provider: 'chatecnu', model: 'ecnu-max' }, pending: null },
+      },
+    }),
+  )
+
+  await harness.rpc('backfill', {})
+  const report = await harness.rpc('report', { days: 30 })
+  assert.equal(report.totals.cacheRead, 9000, 'only the parent is real usage')
+  assert.equal(report.totals.output, 500)
+  assert.equal(report.count, 1, 'the fork never spent anything of its own')
+})
