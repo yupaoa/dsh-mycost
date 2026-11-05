@@ -1,6 +1,6 @@
 {
   "name": "dsh-mycost",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "description": "Token 用量统计：按模型与提供商拆分最近 30 天的缓存命中 / 未命中 / 输出 token，含缓存命中率与用量结构，支持今天 / 7 天 / 30 天与实时增量。",
   "keywords": [
     "deepseek",
