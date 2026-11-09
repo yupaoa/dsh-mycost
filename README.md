@@ -109,7 +109,9 @@ node scripts/purge-seeded.mjs             # 实际执行（自动备份）
 
 ## 安装
 
-**本插件未发布到 npm**，请从 GitHub 安装。
+**本插件未发布到 npm**，请从 GitHub 安装。包名（`package.json` 里的 `name`）是
+`@yupaoa/dsh-mycost`，仓库地址仍是 `yupaoa/dsh-mycost`；下面配置里依赖键与 bundle 名
+都用带 scope 的完整包名。
 
 ### 方式一：手动链接（推荐，任何 DSH 版本都可用）
 
@@ -125,10 +127,10 @@ git clone https://github.com/yupaoa/dsh-mycost.git $env:USERPROFILE\dsh-plugins\
 ```json
 {
   "dependencies": {
-    "dsh-mycost": "link:C:/Users/<you>/dsh-plugins/dsh-mycost"
+    "@yupaoa/dsh-mycost": "link:C:/Users/<you>/dsh-plugins/dsh-mycost"
   },
   "dsh": {
-    "profile": { "bundles": ["dsh-mycost"] }
+    "profile": { "bundles": ["@yupaoa/dsh-mycost"] }
   }
 }
 ```
