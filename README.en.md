@@ -130,10 +130,7 @@ node scripts/purge-seeded.mjs             # apply (takes a backup first)
 
 ## Install
 
-**This plugin is not published to npm.** Install it from GitHub. The package name
-(`name` in `package.json`) is `@yupaoa/dsh-mycost`; the repository is still
-`yupaoa/dsh-mycost`, and the snippets below use the full scoped name for both the
-dependency key and the bundle entry.
+**This plugin is not published to npm.** Install it from GitHub.
 
 ### Option 1: manual link (recommended, works on any DSH version)
 
@@ -150,10 +147,10 @@ git clone https://github.com/yupaoa/dsh-mycost.git $env:USERPROFILE\dsh-plugins\
 ```json
 {
   "dependencies": {
-    "@yupaoa/dsh-mycost": "link:C:/Users/<you>/dsh-plugins/dsh-mycost"
+    "dsh-mycost": "link:C:/Users/<you>/dsh-plugins/dsh-mycost"
   },
   "dsh": {
-    "profile": { "bundles": ["@yupaoa/dsh-mycost"] }
+    "profile": { "bundles": ["dsh-mycost"] }
   }
 }
 ```
