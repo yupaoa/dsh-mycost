@@ -24,6 +24,12 @@ export const Config = z.object({
 
 export const CHANNEL = '/my-cost'
 
+/**
+ * Projection keys this plugin reads. `snapshot(session, keys)` computes only the
+ * named units, so the list is also the cost bound of every read.
+ */
+const PROJECTION_KEYS = ['tokenUsage', 'modelSelection', 'sessionListMetadata']
+
 const PRUNE_INTERVAL_MS = 6 * 60 * 60 * 1000
 
 /** Fallback cadence of the real-time top-up when no projection hook fires. */
@@ -198,6 +204,29 @@ function mount(ctx, config, mark = () => {}) {
   }
 
   /**
+   * Client views at a Session's cursor — the supported read face.
+   *
+   * `sessionProjections.stateOf(session, key)` is deprecated since 0.2.2-rc.1
+   * (one warning per key per boot) and returns host state; `snapshot` returns the
+   * same units as their wire views, which is what the two read sites below want.
+   * The views differ from host state only in wrapping — `tokenUsage`'s view *is*
+   * its totals slice, `modelSelection`'s keeps `lastUsed` — so both keep their
+   * `?.totals ?? x` / `?.lastUsed ?? x` tolerance for either face.
+   *
+   * `values` is empty when no selected unit is registered, so an absent
+   * projection is simply a missing key, never an error.
+   */
+  function snapshotValues(session) {
+    if (typeof projections?.snapshot !== 'function') return undefined
+    try {
+      return projections.snapshot(session, PROJECTION_KEYS)?.values
+    } catch (error) {
+      warn(`my-cost: projection snapshot failed: ${error?.message ?? error}`)
+      return undefined
+    }
+  }
+
+  /**
    * Rebuild history from the sessions the harness already has on disk.
    *
    * Session summaries carry their cached `tokenUsage` and `modelSelection`
@@ -266,13 +295,13 @@ function mount(ctx, config, mark = () => {}) {
       const session = candidate.session
       const sessionId = session?.id ?? session?.sessionId
       const values = candidate.values ?? {}
-      // Live sessions read the registry; cold ones read the cached block, whose
-      // `values[key]` is already unwrapped (an older layout nested `{ver,seq,val}`).
+      // Live sessions read the registry's client views; cold ones read the cached
+      // block, whose `values[key]` is already unwrapped (an older layout nested
+      // `{ver,seq,val}`).
+      const liveValues = candidate.kind === 'live' ? snapshotValues(session) : undefined
       const read = (key) => {
-        if (candidate.kind === 'live' && typeof projections?.stateOf === 'function') {
-          const value = projections.stateOf(session, key)
-          if (value !== undefined) return value
-        }
+        const live = liveValues?.[key]
+        if (live !== undefined) return live
         const cached = values[key]
         return cached && typeof cached === 'object' && 'val' in cached ? cached.val : cached
       }
@@ -481,7 +510,7 @@ function mount(ctx, config, mark = () => {}) {
    * rewritten row simply reappears on the next pass.
    */
   async function runSync(reason) {
-    if (typeof sessions?.list !== 'function' || typeof projections?.stateOf !== 'function') {
+    if (typeof sessions?.list !== 'function' || typeof projections?.snapshot !== 'function') {
       return { unavailable: true, reason, written: 0 }
     }
     try {
@@ -498,10 +527,11 @@ function mount(ctx, config, mark = () => {}) {
       for (const session of Array.isArray(live) ? live : []) {
         const sessionId = session?.id ?? session?.sessionId
         if (!sessionId) continue
-        const tokenUsage = projections.stateOf(session, 'tokenUsage')
+        const values = snapshotValues(session) ?? {}
+        const tokenUsage = values.tokenUsage
         const usage = tokenUsage?.totals ?? tokenUsage
         if (!usage) continue
-        const selection = projections.stateOf(session, 'modelSelection')
+        const selection = values.modelSelection
         const route = selection?.lastUsed ?? selection
         if (!route?.provider || !route?.model) continue
         seededRows += await topUpSeeded(session, sessionId, usage, route, stored, now)

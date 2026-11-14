@@ -80,7 +80,7 @@ DeepSeek Harness 的 token 用量统计插件：把最近 30 天的用量按**�
 触发来自两张网：
 
 - `sessionProjections.onChanged`（该构建提供时）——投影一变就置脏，700ms 防抖后写一次；
-- 每 20 秒轮询 `sessions.list()` + `stateOf(session, 'tokenUsage')`——不依赖事件，始终有效。
+- 每 20 秒轮询 `sessions.list()` + `sessionProjections.snapshot(session, ['tokenUsage'])`——不依赖事件，始终有效。
 
 `session/event` 只作为触发器，不直接写行：事件里的 `usage` 是单次调用量，与增量口径混用会重复计数。
 

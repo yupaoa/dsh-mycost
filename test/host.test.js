@@ -37,7 +37,27 @@ function fakeContext({ sessions = [], cold = [] } = {}) {
   const scoped = {
     get: (key) => {
       if (key === 'sessions') return { list: async () => sessions }
-      if (key === 'sessionProjections') return { stateOf: (session, name) => session?.projections?.[name] }
+      if (key === 'sessionProjections') {
+        // The host's client-view face: `snapshot(session, keys)`. Its `wire.view`
+        // is the totals slice for `tokenUsage` (dsh-token-meter) and the
+        // `{lastUsed, next}` pair for `modelSelection` (dsh-agent); the fixtures
+        // below keep the host-state shape, so the stub applies that projection.
+        return {
+          snapshot: (session, keys) => {
+            const state = session?.projections ?? {}
+            const views = {
+              tokenUsage: state.tokenUsage?.totals,
+              modelSelection: state.modelSelection,
+              sessionListMetadata: state.sessionListMetadata,
+            }
+            const values = {}
+            for (const name of keys ?? Object.keys(views)) {
+              if (views[name] !== undefined) values[name] = views[name]
+            }
+            return { asOfSeq: 0, values }
+          },
+        }
+      }
       if (key === 'sessionQuery') return { listSessions: async () => cold.map((header) => ({ header })) }
       if (key === 'sessionProjectionCache') return { cachedSnapshot: (header) => ({ values: header?.values ?? {} }) }
       if (key === 'connection') return { requestRejection: () => undefined }
@@ -139,8 +159,10 @@ test('an unknown RPC endpoint fails loudly', async () => {
  * One `sessions.list()` entry as the harness builds it.
  *
  * The host hands back session objects; cached projections are read through
- * `sessionProjections.stateOf(session, key)`. `tokenUsage` nests its four
- * counters under `totals`; `modelSelection` carries `lastUsed`.
+ * `sessionProjections.snapshot(session, keys)` (client views). `tokenUsage`
+ * nests its four counters under `totals` in host state — the stub's view is
+ * that slice, exactly as the host projects it; `modelSelection` carries
+ * `lastUsed`.
  */
 const listed = (sessionId, over = {}) => ({
   id: sessionId,

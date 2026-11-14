@@ -94,7 +94,7 @@ Two triggers keep it fresh:
 
 - `sessionProjections.onChanged` (when the build provides it) — a projection change
   marks the state dirty and a write follows after a 700 ms debounce;
-- a 20-second poll of `sessions.list()` + `stateOf(session, 'tokenUsage')` — no event
+- a 20-second poll of `sessions.list()` + `sessionProjections.snapshot(session, ['tokenUsage'])` — no event
   plumbing involved, always effective.
 
 `session/event` is only a trigger now; it never writes rows. The `usage` inside an
